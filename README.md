@@ -80,7 +80,7 @@ yarn dev
 
 ## Component Structure
 
-The main component (`Chat.tsx`) includes:
+The main component (`Page.tsx`) includes:
 - State management for characters, story generation, and UI
 - Character form handling
 - Genre and tone selection
