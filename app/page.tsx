@@ -1,101 +1,442 @@
-import Image from "next/image";
+"use client";
+import { useState, useEffect, ChangeEvent } from "react";
+import { Trash2, Edit, Plus, Save } from "lucide-react";
 
-export default function Home() {
+interface Character {
+  id: string;
+  name: string;
+  description: string;
+  personality: string;
+}
+
+interface Genre {
+  emoji: string;
+  value: string;
+}
+
+interface Tone {
+  emoji: string;
+  value: string;
+}
+
+interface State {
+  genre: string;
+  tone: string;
+}
+
+const baseCharacters: Character[] = [
+  {
+    id: "1",
+    name: "Mario",
+    description: "A portly Italian plumber who lives in NYC with his brother Luigi",
+    personality: "Mario is a jack of all trades who uses his jumping skills and power-ups to fight his archrival, Bowser"
+  },
+  {
+    id: "2",
+    name: "Speed Racer",
+    description: "A young race car driver known for racing, family, and unique abilities. Drives the Mach 5 with special devices.",
+    personality: "A good guy who is passionate about racing and cars, always willing to risk his life to save others"
+  },
+  {
+    id: "3",
+    name: "Nancy Drew",
+    description: "Former teenage detective drawn back into solving mysteries after a family homicide",
+    personality: "Bright, pretty, and nicer than most people. Curious, independent, and empowering"
+  }
+];
+
+export default function Chat() {
+  const [mounted, setMounted] = useState<boolean>(false);
+  const [characters, setCharacters] = useState<Character[]>(baseCharacters);
+  const [editingCharacter, setEditingCharacter] = useState<Character | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [streamedStory, setStreamedStory] = useState<string>("");
+  const [newCharacter, setNewCharacter] = useState<Character>({
+    id: "",
+    name: "",
+    description: "",
+    personality: ""
+  });
+  const [showCharacterForm, setShowCharacterForm] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const genres: Genre[] = [
+    { emoji: "🧙", value: "Fantasy" },
+    { emoji: "🕵️", value: "Mystery" },
+    { emoji: "💑", value: "Romance" },
+    { emoji: "🚀", value: "Sci-Fi" },
+  ];
+
+  const tones: Tone[] = [
+    { emoji: "😊", value: "Happy" },
+    { emoji: "😢", value: "Sad" },
+    { emoji: "😏", value: "Sarcastic" },
+    { emoji: "😂", value: "Funny" },
+  ];
+
+  const [state, setState] = useState<State>({
+    genre: "",
+    tone: "",
+  });
+
+  const handleChange = (e: ChangeEvent<HTMLInputElement>): void => {
+    const { name, value } = e.target;
+    setState((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleCharacterChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): void => {
+    const { name, value } = e.target;
+    setNewCharacter(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const addCharacter = (): void => {
+    if (newCharacter.name && newCharacter.description && newCharacter.personality) {
+      setCharacters(prev => [...prev, { ...newCharacter, id: Date.now().toString() }]);
+      setNewCharacter({ id: "", name: "", description: "", personality: "" });
+      setShowCharacterForm(false);
+    }
+  };
+
+  const deleteCharacter = (id: string): void => {
+    setCharacters(prev => prev.filter(char => char.id !== id));
+  };
+
+  const startEditing = (character: Character): void => {
+    setEditingCharacter(character);
+    setNewCharacter(character);
+    setShowCharacterForm(true);
+  };
+
+  const saveEdit = (): void => {
+    setCharacters(prev => 
+      prev.map(char => char.id === editingCharacter?.id ? newCharacter : char)
+    );
+    setEditingCharacter(null);
+    setNewCharacter({ id: "", name: "", description: "", personality: "" });
+    setShowCharacterForm(false);
+  };
+
+  const generateStoryPrompt = (): string => {
+    const characterDescriptions = characters
+      .map(char => `${char.name}: ${char.description}. Personality: ${char.personality}`)
+      .join("\n");
+    
+    return `Generate a ${state.genre} story in a ${state.tone} tone using these characters:\n${characterDescriptions}\n\nAfter the story, provide a brief summary of each character's role in the story.`;
+  };
+
+  const cleanTokenizedText = (text: string): string => {
+    return text
+      // Step 1: Basic cleanup
+      .replace(/\d+:"([^"]+)"/g, '$1')
+      .replace(/\s+/g, ' ')
+  
+      // Step 2: Fix split proper names and known phrases
+      .replace(/S arcastic/g, 'Sarcastic')
+      .replace(/M ach/g, 'Mach')
+      .replace(/N ancy/g, 'Nancy')
+      
+      // Step 3: Add spaces between words
+      .replace(/([a-z])([A-Z])/g, '$1 $2')  // Add space between camelCase
+      .replace(/([.!?,;:])([A-Za-z])/g, '$1 $2')  // Add space after punctuation
+      .replace(/([A-Za-z])([.!?,;:])/g, '$1$2')  // Remove space before punctuation
+      
+      // Step 4: Fix compound words and contractions
+      .replace(/(\w+)of(\w+)/g, '$1 of $2')
+      .replace(/(\w+)in(\w+)/g, '$1 in $2')
+      .replace(/(\w+)the(\w+)/g, '$1 the $2')
+      .replace(/(\w+)and(\w+)/g, '$1 and $2')
+      .replace(/(\w+)to(\w+)/g, '$1 to $2')
+      .replace(/(\w+)with(\w+)/g, '$1 with $2')
+      .replace(/(\w+)for(\w+)/g, '$1 for $2')
+      .replace(/(\w+)from(\w+)/g, '$1 from $2')
+      
+      // Step 5: Fix contractions
+      .replace(/(\w+)'(\w+)/g, '$1\'$2')  // Fix split contractions
+      
+      // Step 6: Handle hyphenation
+      .replace(/(\w+)-\s*(\w+)/g, '$1-$2')
+      
+      // Step 7: Handle quotes
+      .replace(/"\s+/g, '"')
+      .replace(/\s+"/g, '"')
+      
+      // Step 8: Handle line breaks
+      .replace(/\\n/g, '\n')
+      .replace(/([.!?])\s*\n/g, '$1\n\n')
+      .replace(/\n{3,}/g, '\n\n')
+      
+      // Step 9: Final spacing cleanup
+      .replace(/\s+([.,!?:;])/g, '$1')
+      .replace(/([.,!?:;])\s*/g, '$1 ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  };
+  
+  const processStreamChunk = (chunk: string, buffer: string): {
+    processedText: string;
+    remainingBuffer: string;
+  } => {
+    // Combine buffer with new chunk
+    const combinedText = buffer + chunk;
+    
+    // Split on sentence boundaries, preserving quotes
+    const sentences = combinedText.split(/(?<=[.!?])\s+(?=[A-Z"]|\n\n|$)/);
+    
+    // Keep incomplete sentence in buffer
+    let remainingBuffer = sentences.pop() || '';
+    
+    // Process complete sentences
+    const processedText = sentences.length > 0
+      ? cleanTokenizedText(sentences.join(' ')) + ' '
+      : '';
+      
+    return {
+      processedText,
+      remainingBuffer
+    };
+  };
+  
+  //export { cleanTokenizedText, processStreamChunk };
+  
+  const handleGenerateStory = async (): Promise<void> => {
+    setIsLoading(true);
+    setError("");
+    setStreamedStory("");
+    
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: [{
+            role: "user",
+            content: generateStoryPrompt(),
+          }],
+        }),
+      });
+  
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+  
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+  
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          if (buffer) {
+            const finalText = cleanTokenizedText(buffer);
+            setStreamedStory(prev => prev + finalText);
+          }
+          break;
+        }
+  
+        const chunk = decoder.decode(value, { stream: true });
+        const { processedText, remainingBuffer } = processStreamChunk(chunk, buffer);
+        
+        if (processedText) {
+          setStreamedStory(prev => prev + processedText);
+        }
+        
+        buffer = remainingBuffer;
+      }
+    } catch (err) {
+      console.error("Error generating story:", err);
+      setError("Failed to generate story. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+
+  if (!mounted) return null;
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <main className="mx-auto w-full p-24 flex flex-col">
+      <div className="p-4 m-4">
+        <div className="flex flex-col items-center justify-center space-y-8 text-white">
+          <div className="space-y-2">
+            <h2 className="text-3xl font-bold">Story Telling App</h2>
+            <p className="text-zinc-500 dark:text-zinc-400">
+              Customize the story by selecting the genre, tone, and characters.
+            </p>
+          </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          {/* Character Management Section */}
+          <div className="w-full space-y-4 bg-opacity-25 bg-gray-700 rounded-lg p-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-semibold">Characters</h3>
+              <button
+                onClick={() => setShowCharacterForm(true)}
+                className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded"
+              >
+                <Plus size={16} /> Add Character
+              </button>
+            </div>
+
+            {showCharacterForm && (
+              <div className="space-y-4 bg-opacity-25 bg-gray-600 rounded-lg p-4">
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="Character Name"
+                  value={newCharacter.name}
+                  onChange={handleCharacterChange}
+                  className="w-full p-2 rounded bg-gray-800 text-white"
+                />
+                <textarea
+                  name="description"
+                  placeholder="Character Description"
+                  value={newCharacter.description}
+                  onChange={handleCharacterChange}
+                  className="w-full p-2 rounded bg-gray-800 text-white"
+                />
+                <textarea
+                  name="personality"
+                  placeholder="Character Personality"
+                  value={newCharacter.personality}
+                  onChange={handleCharacterChange}
+                  className="w-full p-2 rounded bg-gray-800 text-white"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={editingCharacter ? saveEdit : addCharacter}
+                    className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded"
+                  >
+                    <Save size={16} /> {editingCharacter ? "Save Edit" : "Add"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCharacterForm(false);
+                      setEditingCharacter(null);
+                      setNewCharacter({ id: "", name: "", description: "", personality: "" });
+                    }}
+                    className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {characters.map((character) => (
+                <div key={character.id} className="bg-opacity-25 bg-gray-600 rounded-lg p-4 space-y-2">
+                  <div className="flex justify-between items-start">
+                    <h4 className="font-semibold">{character.name}</h4>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => startEditing(character)}
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button
+                        onClick={() => deleteCharacter(character.id)}
+                        className="text-red-400 hover:text-red-300"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-300">{character.description}</p>
+                  <p className="text-sm text-gray-400">{character.personality}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Genre Selection */}
+          <div className="space-y-4 bg-opacity-25 bg-gray-700 rounded-lg p-4">
+            <h3 className="text-xl font-semibold">Genre</h3>
+            <div className="flex flex-wrap justify-center">
+              {genres.map(({ value, emoji }) => (
+                <div
+                  key={value}
+                  className="p-4 m-2 bg-opacity-25 bg-gray-600 rounded-lg"
+                >
+                  <input
+                    id={`genre-${value}`}
+                    type="radio"
+                    value={value}
+                    name="genre"
+                    checked={state.genre === value}
+                    onChange={handleChange}
+                  />
+                  <label className="ml-2" htmlFor={`genre-${value}`}>
+                    {`${emoji} ${value}`}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Tone Selection */}
+          <div className="space-y-4 bg-opacity-25 bg-gray-700 rounded-lg p-4">
+            <h3 className="text-xl font-semibold">Tones</h3>
+            <div className="flex flex-wrap justify-center">
+              {tones.map(({ value, emoji }) => (
+                <div
+                  key={value}
+                  className="p-4 m-2 bg-opacity-25 bg-gray-600 rounded-lg"
+                >
+                  <input
+                    id={`tone-${value}`}
+                    type="radio"
+                    name="tone"
+                    value={value}
+                    checked={state.tone === value}
+                    onChange={handleChange}
+                  />
+                  <label className="ml-2" htmlFor={`tone-${value}`}>
+                    {`${emoji} ${value}`}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Generate Story Button */}
+          <button
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
+            disabled={isLoading || !state.genre || !state.tone || characters.length === 0}
+            onClick={handleGenerateStory}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            {isLoading ? "Generating..." : "Generate Story"}
+          </button>
+
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-500 bg-opacity-25 text-red-100 p-4 rounded-lg w-full">
+              {error}
+            </div>
+          )}
+
+          {/* Story Display */}
+          {streamedStory && (
+            <div className="bg-opacity-25 bg-gray-700 rounded-lg p-4 w-full">
+              <div className="whitespace-pre-wrap prose prose-invert max-w-none">
+                {streamedStory}
+              </div>
+            </div>
+          )}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </div>
+    </main>
   );
 }
